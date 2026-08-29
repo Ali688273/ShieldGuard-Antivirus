@@ -21,6 +21,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: current
 
       - name: Generate Release Keystore
         run: |
@@ -35,13 +37,11 @@ jobs:
             -dname "CN=ShieldGuard, OU=Development, O=ShieldGuard, L=City, ST=State, C=US"
 
       - name: Build Signed Release APK
-        uses: gradle/gradle-build-action@v3
-        with:
-          arguments: |
-            assembleRelease
-            -Pandroid.injected.signing.store.file=${{ github.workspace }}/release.keystore
-            -Pandroid.injected.signing.store.password=android
-            -Pandroid.injected.signing.key.alias=my-key-alias
+        run: |
+          gradle assembleRelease \
+            -Pandroid.injected.signing.store.file=$(pwd)/release.keystore \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=my-key-alias \
             -Pandroid.injected.signing.key.password=android
 
       - name: Create Release and Upload APK
