@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Environment
+import androidx.core.content.ContextCompat
 import java.io.File
 
 class VirusScanner(private val context: Context) {
@@ -38,32 +39,42 @@ class VirusScanner(private val context: Context) {
             } else if (hasSMS && hasLocation) {
                 results.add(ScanResult(appName, "⚠️ هشدار: دسترسی همزمان به پیامک و موقعیت مکانی", true))
             } else {
-                results.add(ScanResult(appName, "✓ اسکن شد - بدون هیچ تهدید و دسترسی مشکوک", false))
+                results.add(ScanResult(appName, "✓ اسکن شد - بدون دسترسی مشکوک", false))
             }
         }
-        
         return results.sortedByDescending { it.isDanger }
     }
 
     fun scanFiles(onProgress: (String, Int) -> Unit): List<ScanResult> {
         val results = mutableListOf<ScanResult>()
-        val dirsToScan = listOf(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
-            Environment.getExternalStorageDirectory()
-        )
+        val allFiles = mutableListOf<File>()
 
-        val filesToScan = mutableListOf<File>()
-        dirsToScan.forEach { dir ->
-            if (dir.exists() && dir.isDirectory) {
-                val list = dir.listFiles()
-                if (list != null) {
-                    filesToScan.addAll(list)
+        // پیدا کردن مسیرهای حافظه داخلی و رم خارجی (SD Card)
+        val storageDirs = ContextCompat.getExternalFilesDirs(context, null)
+        val rootDirs = mutableListOf<File>()
+        
+        rootDirs.add(Environment.getExternalStorageDirectory()) // حافظه داخلی
+        
+        storageDirs.forEach { dir ->
+            dir?.let {
+                var parent = it.parentFile
+                while (parent != null && parent.name != "Android") {
+                    parent = parent.parentFile
+                }
+                if (parent != null && parent.parentFile != null) {
+                    rootDirs.add(parent.parentFile!!) // مسیر رم خارجی
                 }
             }
         }
 
-        val total = filesToScan.size
+        // جمع‌آوری بازگشتی تمام فایل‌ها درون تمام پوشه‌ها
+        rootDirs.distinctBy { it.absolutePath }.forEach { root ->
+            if (root.exists()) {
+                collectFilesRecursively(root, allFiles, maxDepth = 5)
+            }
+        }
+
+        val total = allFiles.size
         if (total == 0) {
             onProgress("در حال بررسی حافظه...", 100)
             return results
@@ -71,17 +82,29 @@ class VirusScanner(private val context: Context) {
 
         val dangerousExtensions = setOf("apk", "exe", "vbs", "bat", "sh", "dex")
 
-        for ((index, file) in filesToScan.withIndex()) {
+        for ((index, file) in allFiles.withIndex()) {
             val percent = ((index + 1) * 100) / total
             onProgress(file.name, percent)
-            Thread.sleep(80)
 
-            if (file.isFile && dangerousExtensions.contains(file.extension.lowercase())) {
-                results.add(ScanResult(file.name, "⚠️ فایل اجرایی/نصب ناامن در حافظه (${file.length() / 1024} KB)", true))
-            } else if (file.isFile) {
-                results.add(ScanResult(file.name, "✓ فایل بررسی شد - پاک است", false))
+            if (dangerousExtensions.contains(file.extension.lowercase())) {
+                results.add(ScanResult(file.name, "⚠️ فایل ناامن در مسیر: ${file.parent} (${file.length() / 1024} KB)", true))
             }
         }
-        return results.sortedByDescending { it.isDanger }
+        return results
+    }
+
+    private fun collectFilesRecursively(dir: File, fileList: MutableList<File>, maxDepth: Int) {
+        if (maxDepth <= 0) return
+        val files = dir.listFiles() ?: return
+        for (file in files) {
+            if (file.isDirectory) {
+                // نادیده گرفتن پوشه‌های سیستمی سنگین یا خاص
+                if (!file.name.startsWith(".")) {
+                    collectFilesRecursively(file, fileList, maxDepth - 1)
+                }
+            } else if (file.isFile) {
+                fileList.add(file)
+            }
+        }
     }
 }
