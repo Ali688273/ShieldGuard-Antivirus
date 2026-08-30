@@ -3,8 +3,10 @@ package com.shieldguard.antivirus
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.Settings
 import android.view.View
 import android.widget.Button
@@ -28,8 +30,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: ThreatAdapter
     private lateinit var scanner: VirusScanner
 
-    private val STORAGE_PERMISSION_CODE = 101
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -44,14 +44,14 @@ class MainActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
-        checkAndRequestPermissions()
+        checkAndRequestStoragePermissions()
 
         findViewById<Button>(R.id.btnScanApps).setOnClickListener { startAppScan() }
         findViewById<Button>(R.id.btnScanFiles).setOnClickListener { 
-            if (hasStoragePermission()) {
+            if (hasFullStoragePermission()) {
                 startFileScan()
             } else {
-                checkAndRequestPermissions()
+                requestFullStoragePermission()
             }
         }
         
@@ -60,27 +60,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun hasStoragePermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+    private fun hasFullStoragePermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
         } else {
             ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         }
     }
 
-    private fun checkAndRequestPermissions() {
-        if (!hasStoragePermission()) {
-            val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                arrayOf(
-                    Manifest.permission.READ_MEDIA_IMAGES,
-                    Manifest.permission.READ_MEDIA_VIDEO,
-                    Manifest.permission.READ_MEDIA_AUDIO
-                )
-            } else {
-                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+    private fun checkAndRequestStoragePermissions() {
+        if (!hasFullStoragePermission()) {
+            requestFullStoragePermission()
+        }
+    }
+
+    private fun requestFullStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                intent.data = Uri.parse("package:$packageName")
+                startActivity(intent)
+            } catch (e: Exception) {
+                val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                startActivity(intent)
             }
-            ActivityCompat.requestPermissions(this, permissions, STORAGE_PERMISSION_CODE)
+        } else {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                101
+            )
         }
     }
 
@@ -106,7 +115,7 @@ class MainActivity : AppCompatActivity() {
                     statusText.text = "برنامه‌ها اسکن شدند (${results.size} برنامه پاک)"
                     statusText.setTextColor(getColor(android.R.color.holo_green_light))
                 } else {
-                    statusText.text = "⚠️ $dangerCount مورد مشکوک از بین ${results.size} برنامه یافت شد"
+                    statusText.text = "⚠️ $dangerCount مورد مشکوک پیدا شد"
                     statusText.setTextColor(getColor(android.R.color.holo_red_light))
                 }
                 adapter.notifyDataSetChanged()
@@ -120,7 +129,7 @@ class MainActivity : AppCompatActivity() {
             val results = scanner.scanFiles { fileName, percent ->
                 runOnUiThread {
                     percentText.text = "$percent%"
-                    statusText.text = "در حال آنالیز عمیق پوشه‌ها: $fileName"
+                    statusText.text = "در حال ورود و آنالیز عمیق پوشه: $fileName"
                     progressBar.progress = percent
                 }
             }
@@ -130,12 +139,12 @@ class MainActivity : AppCompatActivity() {
                 threatList.clear()
 
                 if (results.isEmpty()) {
-                    threatList.add(ThreatItem("حافظه و کارت حافظه پاک هستند", "هیچ فایل مخرب یا خطرسازی در پوشه‌ها پیدا نشد.", false))
-                    statusText.text = "هیچ فایل مشکوکی پیدا نشد"
+                    threatList.add(ThreatItem("تمام پوشه‌ها و کارت حافظه اسکن شدند", "هیچ فایل مخرب یا خطرسازی در هیچ پوشه‌ای پیدا نشد.", false))
+                    statusText.text = "حافظه و پوشه‌ها کاملاً پاک هستند"
                     statusText.setTextColor(getColor(android.R.color.holo_green_light))
                 } else {
                     results.forEach { threatList.add(ThreatItem(it.title, it.description, it.isDanger)) }
-                    statusText.text = "⚠️ ${results.size} فایل ناامن پیدا شد"
+                    statusText.text = "⚠️ ${results.size} فایل ناامن در پوشه‌ها پیدا شد"
                     statusText.setTextColor(getColor(android.R.color.holo_red_light))
                 }
                 adapter.notifyDataSetChanged()
@@ -147,36 +156,23 @@ class MainActivity : AppCompatActivity() {
         showLoading()
         thread {
             runOnUiThread {
-                statusText.text = "در حال محاسبه و آزادسازی حافظه پنهان..."
+                statusText.text = "در حال پاک‌سازی فایل‌های موقت و حافظه پنهان..."
                 progressBar.progress = 50
                 percentText.text = "50%"
             }
 
-            Thread.sleep(800)
-            val cacheSizeBefore = scanner.getCacheSize()
-            val success = scanner.clearAppCache()
+            Thread.sleep(600)
+            val freedAmount = scanner.clearAppCache()
 
             runOnUiThread {
                 hideLoading()
                 threatList.clear()
 
-                if (success) {
-                    threatList.add(ThreatItem("پاک‌سازی فایل‌های موقت", "فایل‌های کش موقت برنامه با موفقیت آزادسازی شدند ($cacheSizeBefore).", false))
-                    threatList.add(ThreatItem("پاک‌سازی کش کلی دستگاه", "برای آزادسازی کامل حافظه پنهان سایر برنامه‌ها، صفحه مدیریت حافظه باز شد.", false))
-                    statusText.text = "حافظه پنهان آزادسازی شد"
-                    statusText.setTextColor(getColor(android.R.color.holo_green_light))
-                } else {
-                    statusText.text = "خطا در پاک‌سازی کش"
-                    statusText.setTextColor(getColor(android.R.color.holo_red_light))
-                }
+                threatList.add(ThreatItem("پاک‌سازی حافظه پنهان", "مقدار $freedAmount فایل‌های موقت با موفقیت پاک‌سازی شد.", false))
+                statusText.text = "حافظه پنهان پاک‌سازی شد ($freedAmount آزادسازی شد)"
+                statusText.setTextColor(getColor(android.R.color.holo_green_light))
+                
                 adapter.notifyDataSetChanged()
-
-                try {
-                    val intent = Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    Toast.makeText(this@MainActivity, "تنظیمات حافظه باز شد", Toast.LENGTH_SHORT).show()
-                }
             }
         }
     }
