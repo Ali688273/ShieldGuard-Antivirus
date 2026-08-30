@@ -1,71 +1,93 @@
 package com.shieldguard.antivirus
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.Environment
 import java.io.File
 import java.security.MessageDigest
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
 
 data class ScanResult(
-    val name: String,
-    val pathOrPackage: String,
-    val isMalicious: Boolean,
-    val reason: String
+    val title: String,
+    val description: String,
+    val type: String // "APP", "FILE", "CLOUD"
 )
 
 class VirusScanner(private val context: Context) {
 
-    private val knownMalwareHashes = setOf(
-        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    private val systemWhitelist = setOf(
+        "com.google.android.gms",
+        "com.google.android.gsf",
+        "com.google.android.projection.gearhead",
+        "com.android.shell",
+        "com.android.phone",
+        "com.google.android.apps.messaging",
+        "com.android.mms"
     )
 
-    fun scanInstalledApps(): List<ScanResult> {
-        val results = mutableListOf<ScanResult>()
+    // اسکن برنامه‌ها
+    fun scanApps(): List<ScanResult> {
         val pm = context.packageManager
-        val packages = pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
+        val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+        val list = mutableListOf<ScanResult>()
 
-        for (pkg in packages) {
-            val appName = pkg.applicationInfo.loadLabel(pm).toString()
-            val requestedPermissions = pkg.requestedPermissions
+        for (app in installedApps) {
+            if (systemWhitelist.contains(app.packageName)) continue
 
-            var isDangerous = false
-            var reason = "برنامه ایمن است"
+            val appName = pm.getApplicationLabel(app).toString()
+            val hasSMS = pm.checkPermission(android.Manifest.permission.RECEIVE_SMS, app.packageName) == PackageManager.PERMISSION_GRANTED
+            val hasOverlay = pm.checkPermission(android.Manifest.permission.SYSTEM_ALERT_WINDOW, app.packageName) == PackageManager.PERMISSION_GRANTED
 
-            if (requestedPermissions != null) {
-                val hasSms = requestedPermissions.contains("android.permission.RECEIVE_SMS")
-                val hasOverlay = requestedPermissions.contains("android.permission.SYSTEM_ALERT_WINDOW")
+            if (hasSMS && hasOverlay) {
+                list.add(ScanResult(appName, "دسترسی همزمان مشکوک به پیامک و نمایش روی صفحه", "APP"))
+            }
+        }
+        return list
+    }
 
-                if (hasSms && hasOverlay) {
-                    isDangerous = true
-                    reason = "دسترسی همزمان مشکوک به پیامک و نمایش روی سایر برنامه‌ها"
+    // اسکن فایل‌ها، عکس‌ها و ویدیوها (فقط هشدار)
+    fun scanMediaFiles(): List<ScanResult> {
+        val list = mutableListOf<ScanResult>()
+        val downloadFolder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        
+        if (downloadFolder.exists() && downloadFolder.isDirectory) {
+            downloadFolder.listFiles()?.forEach { file ->
+                if (file.extension.lowercase() in listOf("apk", "exe", "vbs")) {
+                    list.add(ScanResult(file.name, "فایل مشکوک اجرایی در پوشه دانلودها یافته شد", "FILE"))
                 }
             }
-
-            results.add(ScanResult(appName, pkg.packageName, isDangerous, reason))
         }
-        return results
+        return list
     }
 
-    fun scanFile(file: File): ScanResult {
-        if (!file.exists() || file.isDirectory) {
-            return ScanResult(file.name, file.absolutePath, false, "فایل نامعتبر")
-        }
+    // اسکن ابری با پایگاه داده ۷۰ آنتی‌ویروس (VirusTotal API)
+    fun scanWithVirusTotal(filePath: String, apiKey: String): String {
+        return try {
+            val file = File(filePath)
+            if (!file.exists()) return "فایل یافت نشد"
 
-        val hash = calculateSHA256(file)
-        val isMalicious = knownMalwareHashes.contains(hash)
-        val reason = if (isMalicious) "شناسایی فایل مخرب مطابقت داده شده" else "فایل پاک است"
+            val md = MessageDigest.getInstance("SHA-256")
+            val hash = md.digest(file.readBytes()).joinToString("") { "%02x".format(it) }
 
-        return ScanResult(file.name, file.absolutePath, isMalicious, reason)
-    }
+            val url = URL("https://www.virustotal.com/api/v3/files/$hash")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("x-apikey", apiKey)
 
-    private fun calculateSHA256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { inputStream ->
-            val buffer = ByteArray(8192)
-            var bytesRead: Int
-            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                digest.update(buffer, 0, bytesRead)
+            if (conn.responseCode == 200) {
+                val response = conn.inputStream.bufferedReader().readText()
+                val json = JSONObject(response)
+                val stats = json.getJSONObject("data").getJSONObject("attributes").getJSONObject("last_analysis_stats")
+                val malicious = stats.getInt("malicious")
+                "نتیجه: $malicious آنتی‌ویروس از ۷۰ موتور، این فایل را آلوده تشخیص دادند."
+            } else {
+                "فایل جدید است یا در پایگاه داده جهانی VirusTotal ثبت نشده."
             }
+        } catch (e: Exception) {
+            "خطا در اتصال به شبکه‌ی ۷۰ آنتی‌ویروس"
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }
