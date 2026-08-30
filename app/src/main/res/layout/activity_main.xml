@@ -6,40 +6,61 @@
     android:background="#0F172A"
     android:padding="16dp">
 
-    <!-- Header Shield Status -->
+    <!-- Header Status Card -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center"
-        android:padding="20dp"
+        android:padding="16dp"
         android:background="#1E293B">
 
         <ImageView
-            android:layout_width="72dp"
-            android:layout_height="72dp"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
             android:src="@drawable/ic_launcher" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="شیلد گارد | آنتی ویروس هوشمند"
+            android:text="شیلد گارد | سیستم امنیتی"
             android:textColor="#FFFFFF"
             android:textSize="18sp"
             android:textStyle="bold"
-            android:layout_marginTop="8dp"/>
+            android:layout_marginTop="6dp"/>
+
+        <TextView
+            android:id="@+id/percentText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0%"
+            android:textColor="#0EA5E9"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            android:layout_marginTop="4dp"/>
 
         <TextView
             android:id="@+id/statusText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="سیستم امن است"
-            android:textColor="#10B981"
-            android:textSize="14sp"
+            android:text="برای شروع اسکن یک گزینه را انتخاب کنید"
+            android:textColor="#94A3B8"
+            android:textSize="13sp"
             android:layout_marginTop="4dp"/>
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="12dp"
+            android:max="100"
+            android:progressDrawable="@android:drawable/progress_horizontal"
+            android:visibility="gone"
+            android:layout_marginTop="8dp"/>
     </LinearLayout>
 
-    <!-- Scan Action Buttons -->
+    <!-- Scan Buttons -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -59,7 +80,7 @@
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:text="اسکن رسانه‌ها"
+            android:text="اسکن فایل‌ها"
             android:layout_marginStart="6dp"
             android:backgroundTint="#0EA5E9"/>
     </LinearLayout>
@@ -68,24 +89,15 @@
         android:id="@+id/btnCloudScan"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="اسکن ابری (۷۰ آنتی‌ویروس جهانی)"
+        android:text="اسکن ابری (۷۰ آنتی‌ویروس)"
         android:layout_marginTop="6dp"
         android:backgroundTint="#8B5CF6"/>
 
-    <!-- Results Display Area -->
-    <ScrollView
+    <!-- Dynamic RecyclerView List -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="12dp">
-
-        <TextView
-            android:id="@+id/resultText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="برای شروع اسکن یکی از گزینه‌های بالا را انتخاب کنید."
-            android:textColor="#94A3B8"
-            android:textSize="14sp"
-            android:lineSpacingExtra="4dp"/>
-    </ScrollView>
+        android:layout_marginTop="12dp"/>
 </LinearLayout>
