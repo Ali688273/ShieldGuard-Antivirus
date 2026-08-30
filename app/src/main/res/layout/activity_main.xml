@@ -2,102 +2,100 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#121212"
     android:orientation="vertical"
-    android:background="#0F172A"
     android:padding="16dp">
 
-    <!-- Header Status Card -->
-    <LinearLayout
+    <!-- عنوان برنامه -->
+    <TextView
+        android:id="@+id/titleText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="24dp"
+        android:text="Shield Guard Antivirus"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <!-- متن وضعیت اسکن -->
+    <TextView
+        android:id="@+id/statusText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
         android:gravity="center"
-        android:padding="16dp"
-        android:background="#1E293B">
+        android:text="آماده برای اسکن دستگاه"
+        android:textColor="#B0BEC5"
+        android:textSize="14sp" />
 
-        <ImageView
-            android:layout_width="64dp"
-            android:layout_height="64dp"
-            android:src="@drawable/ic_launcher" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="شیلد گارد | سیستم امنیتی"
-            android:textColor="#FFFFFF"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:layout_marginTop="6dp"/>
-
-        <TextView
-            android:id="@+id/percentText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="0%"
-            android:textColor="#0EA5E9"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:visibility="gone"
-            android:layout_marginTop="4dp"/>
-
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="برای شروع اسکن یک گزینه را انتخاب کنید"
-            android:textColor="#94A3B8"
-            android:textSize="13sp"
-            android:layout_marginTop="4dp"/>
-
-        <ProgressBar
-            android:id="@+id/progressBar"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="12dp"
-            android:max="100"
-            android:progressDrawable="@android:drawable/progress_horizontal"
-            android:visibility="gone"
-            android:layout_marginTop="8dp"/>
-    </LinearLayout>
-
-    <!-- Scan Buttons -->
-    <LinearLayout
-        android:layout_width="match_parent"
+    <!-- درصد پیشرفت -->
+    <TextView
+        android:id="@+id/percentText"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="12dp">
+        android:layout_gravity="center"
+        android:layout_marginTop="8dp"
+        android:text="0%"
+        android:textColor="#4CAF50"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
 
-        <Button
-            android:id="@+id/btnScanApps"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="اسکن برنامه‌ها"
-            android:backgroundTint="#0EA5E9"/>
+    <!-- نوار پیشرفت (Progress Bar) -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="12dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="20dp"
+        android:max="100"
+        android:progressDrawable="@android:drawable/progress_horizontal"
+        android:visibility="gone" />
 
-        <Button
-            android:id="@+id/btnScanFiles"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:text="اسکن فایل‌ها"
-            android:layout_marginStart="6dp"
-            android:backgroundTint="#0EA5E9"/>
-    </LinearLayout>
-
+    <!-- دکمه اسکن برنامه‌ها -->
     <Button
-        android:id="@+id/btnCloudScan"
+        android:id="@+id/btnScanApps"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="اسکن ابری (۷۰ آنتی‌ویروس)"
-        android:layout_marginTop="6dp"
-        android:backgroundTint="#8B5CF6"/>
+        android:layout_marginBottom="8dp"
+        android:backgroundTint="#1E88E5"
+        android:padding="12dp"
+        android:text="اسکن سریع برنامه‌ها"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp" />
 
-    <!-- Dynamic RecyclerView List -->
+    <!-- دکمه اسکن عمیق فایل‌ها -->
+    <Button
+        android:id="@+id/btnScanFiles"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:backgroundTint="#43A047"
+        android:padding="12dp"
+        android:text="اسکن عمیق فایل‌ها و حافظه"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp" />
+
+    <!-- دکمه پاک‌سازی حافظه پنهان (Cache Cleaner) -->
+    <Button
+        android:id="@+id/btnCleanCache"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:backgroundTint="#FB8C00"
+        android:padding="12dp"
+        android:text="پاک‌سازی حافظه پنهان (Cache)"
+        android:textColor="#FFFFFF"
+        android:textSize="15sp" />
+
+    <!-- لیست نمایش نتایج اسکن -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="12dp"/>
+        android:scrollbars="vertical" />
+
 </LinearLayout>
