@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
+        // درخواست دسترسی حافظه در ابتدای برنامه
         checkAndRequestPermissions()
 
         findViewById<Button>(R.id.btnScanApps).setOnClickListener { startAppScan() }
@@ -74,7 +75,9 @@ class MainActivity : AppCompatActivity() {
             return activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
                    activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
         } else {
+            @Suppress("DEPRECATION")
             val networkInfo = connectivityManager.activeNetworkInfo ?: return false
+            @Suppress("DEPRECATION")
             return networkInfo.isConnected
         }
     }
@@ -109,7 +112,7 @@ class MainActivity : AppCompatActivity() {
             val results = scanner.scanUserApps { appName, percent ->
                 runOnUiThread {
                     percentText.text = "$percent%"
-                    statusText.text = "در حال بررسی برنامه: $appName"
+                    statusText.text = "در حال آنالیز برنامه: $appName"
                     progressBar.progress = percent
                 }
             }
@@ -153,7 +156,6 @@ class MainActivity : AppCompatActivity() {
                     statusText.text = "هیچ فایل مشکوکی پیدا نشد"
                     statusText.setTextColor(getColor(android.R.color.holo_green_light))
                 } else {
-                    // فقط فایل‌های مشکوک را اضافه کن
                     results.forEach { threatList.add(ThreatItem(it.title, it.description, it.isDanger)) }
                     statusText.text = "⚠️ ${results.size} فایل ناامن پیدا شد"
                     statusText.setTextColor(getColor(android.R.color.holo_red_light))
@@ -166,33 +168,28 @@ class MainActivity : AppCompatActivity() {
     private fun startCloudScan() {
         showLoading()
         thread {
-            val pm = packageManager
-            val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                .filter { (it.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 }
-            
-            val total = if (apps.isNotEmpty()) apps.size else 1
-
-            threatList.clear()
-
-            if (apps.isNotEmpty()) {
-                for ((index, app) in apps.withIndex()) {
-                    val appName = pm.getApplicationLabel(app).toString()
-                    val percent = ((index + 1) * 100) / total
-                    
-                    Thread.sleep(150)
-                    runOnUiThread {
-                        percentText.text = "$percent%"
-                        statusText.text = "استعلام آنلاین (VirusTotal API): $appName"
-                        progressBar.progress = percent
-                    }
-                    threatList.add(ThreatItem(appName, "✓ استعلام ابری: هش برنامه در پایگاه داده جهانی پاک است", false))
+            val results = scanner.scanCloudReal { appName, percent ->
+                runOnUiThread {
+                    percentText.text = "$percent%"
+                    statusText.text = "استعلام ابری آنلاین: $appName"
+                    progressBar.progress = percent
                 }
             }
 
             runOnUiThread {
                 hideLoading()
-                statusText.text = "اسکن ابری آنلاین کامل شد (${apps.size} برنامه تایید شد)"
-                statusText.setTextColor(getColor(android.R.color.holo_green_light))
+                threatList.clear()
+                val dangerCount = results.count { it.isDanger }
+
+                results.forEach { threatList.add(ThreatItem(it.title, it.description, it.isDanger)) }
+
+                if (dangerCount == 0) {
+                    statusText.text = "اسکن ابری آنلاین کامل شد (${results.size} برنامه تایید شد)"
+                    statusText.setTextColor(getColor(android.R.color.holo_green_light))
+                } else {
+                    statusText.text = "⚠️ $dangerCount تهدید ابری کشف شد"
+                    statusText.setTextColor(getColor(android.R.color.holo_red_light))
+                }
                 adapter.notifyDataSetChanged()
             }
         }
