@@ -2,65 +2,62 @@ package com.shieldguard.antivirus
 
 import android.os.Bundle
 import android.widget.Button
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var statusText: TextView
-    private lateinit var scanButton: Button
     private lateinit var scanner: VirusScanner
+    private lateinit var resultText: TextView
+    private lateinit var statusText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(64, 64, 64, 64)
-        }
-
-        statusText = TextView(this).apply {
-            text = "آنتی ویروس شیلد گارد\nجهت بررسی دستگاه دکمه زیر را فشار دهید."
-            textSize = 18f
-            setPadding(0, 0, 0, 32)
-        }
-
-        scanButton = Button(this).apply {
-            text = "شروع اسکن هوشمند"
-        }
-
-        layout.addView(statusText)
-        layout.addView(scanButton)
-        setContentView(layout)
+        setContentView(R.layout.activity_main)
 
         scanner = VirusScanner(this)
+        resultText = findViewById(R.id.resultText)
+        statusText = findViewById(R.id.statusText)
 
-        scanButton.setOnClickListener {
-            runFullScan()
+        val btnScanApps = findViewById<Button>(R.id.btnScanApps)
+        val btnScanFiles = findViewById<Button>(R.id.btnScanFiles)
+        val btnCloudScan = findViewById<Button>(R.id.btnCloudScan)
+
+        btnScanApps.setOnClickListener {
+            val results = scanner.scanApps()
+            if (results.isEmpty()) {
+                resultText.text = "هیچ برنامه مشکوکی پیدا نشد."
+                statusText.text = "برنامه‌ها امن هستند"
+                statusText.setTextColor(getColor(android.R.color.holo_green_light))
+            } else {
+                val sb = StringBuilder("⚠️ موارد مشکوک در برنامه‌ها:\n\n")
+                results.forEach { sb.append("• ${it.title}\n  توضیح: ${it.description}\n\n") }
+                resultText.text = sb.toString()
+                statusText.text = "هشدار! موارد مشکوک یافت شد"
+                statusText.setTextColor(getColor(android.R.color.holo_red_light))
+            }
         }
-    }
 
-    private fun runFullScan() {
-        statusText.text = "در حال اسکن برنامه‌های نصب‌شده..."
-        scanButton.isEnabled = false
+        btnScanFiles.setOnClickListener {
+            val results = scanner.scanMediaFiles()
+            if (results.isEmpty()) {
+                resultText.text = "هیچ فایل یا رسانه آلوده‌ای یافت نشد."
+            } else {
+                val sb = StringBuilder("⚠️ فایل‌های مشکوک به ویروس:\n\n")
+                results.forEach { sb.append("• ${it.title}\n  علت: ${it.description}\n\n") }
+                resultText.text = sb.toString()
+            }
+        }
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            val appResults = scanner.scanInstalledApps()
-            val threats = appResults.filter { it.isMalicious }
-
-            withContext(Dispatchers.Main) {
-                if (threats.isEmpty()) {
-                    statusText.text = "دستگاه شما کاملاً امن است!\nتعداد برنامه‌های بررسی‌شده: ${appResults.size}"
-                } else {
-                    statusText.text = "هشدار! موارد مشکوک یافت شد:\n" +
-                            threats.joinToString("\n") { "${it.name}: ${it.reason}" }
+        btnCloudScan.setOnClickListener {
+            resultText.text = "در حال استعلام از موتور ابری (۷۰ آنتی‌ویروس)..."
+            thread {
+                // تست اتصال به سرور جهانی ۷۰ آنتی ویروس
+                val res = scanner.scanWithVirusTotal("", "YOUR_API_KEY")
+                runOnUiThread {
+                    resultText.text = res
                 }
-                scanButton.isEnabled = true
             }
         }
     }
