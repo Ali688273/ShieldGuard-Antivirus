@@ -6,17 +6,11 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Environment
 import androidx.core.content.ContextCompat
-import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.security.MessageDigest
 
 class VirusScanner(private val context: Context) {
-
-    // کلید API اختصاصی خود از VirusTotal را اینجا قرار دهید
-    private val apiKey = "YOUR_VIRUSTOTAL_API_KEY"
 
     fun scanUserApps(onProgress: (String, Int) -> Unit): List<ScanResult> {
         val pm = context.packageManager
@@ -43,7 +37,6 @@ class VirusScanner(private val context: Context) {
                 val apkFile = File(app.sourceDir)
                 val sha256 = getFileSHA256(apkFile)
 
-                // آنالیز واقعی میزان خطرسازی دسترسی‌ها
                 val score = calculateRiskScore(pm, pkgInfo, app)
 
                 if (score >= 40) {
@@ -58,7 +51,7 @@ class VirusScanner(private val context: Context) {
                     results.add(
                         ScanResult(
                             appName,
-                            "⚠️ برنامه مشکوک (نصب از سورس نامشخص / دسترسی ریسکی) - امتیاز: $score",
+                            "⚠️ برنامه مشکوک (نصب غیرمستقیم / دسترسی حساس) - امتیاز: $score",
                             true
                         )
                     )
@@ -76,47 +69,6 @@ class VirusScanner(private val context: Context) {
             }
         }
         return results.sortedByDescending { it.isDanger }
-    }
-
-    fun scanCloudReal(onProgress: (String, Int) -> Unit): List<ScanResult> {
-        val pm = context.packageManager
-        val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
-
-        val results = mutableListOf<ScanResult>()
-        val total = if (installedApps.isNotEmpty()) installedApps.size else 1
-
-        for ((index, app) in installedApps.withIndex()) {
-            val appName = pm.getApplicationLabel(app).toString()
-            val percent = ((index + 1) * 100) / total
-            onProgress(appName, percent)
-
-            try {
-                val apkFile = File(app.sourceDir)
-                val hash = getFileSHA256(apkFile)
-
-                if (apiKey != "YOUR_VIRUSTOTAL_API_KEY" && apiKey.isNotEmpty()) {
-                    val vtResponse = checkVirusTotalHash(hash)
-                    if (vtResponse != null) {
-                        val positives = vtResponse.first
-                        val totalEngine = vtResponse.second
-                        if (positives > 0) {
-                            results.add(ScanResult(appName, "🚨 تشخیص داده شده توسط $positives از $totalEngine آنتی‌ویروس ابری!", true))
-                        } else {
-                            results.add(ScanResult(appName, "✓ تایید شده در کلود ($totalEngine آنتی‌ویروس جهانی - ۰ تهدید)", false))
-                        }
-                    } else {
-                        results.add(ScanResult(appName, "✓ استعلام هش ابری ($hash) انجام شد - پاک", false))
-                    }
-                } else {
-                    // استعلام هش بر اساس پروتکل استاندارد
-                    results.add(ScanResult(appName, "✓ هش $hash در دیتابیس ابری چک شد - امن", false))
-                }
-            } catch (e: Exception) {
-                results.add(ScanResult(appName, "✓ تایید استعلام ابری", false))
-            }
-        }
-        return results
     }
 
     fun scanFiles(onProgress: (String, Int) -> Unit): List<ScanResult> {
@@ -156,7 +108,32 @@ class VirusScanner(private val context: Context) {
         return results
     }
 
-    // محاسبه واقعی هش SHA-256 فایل
+    fun getCacheSize(): String {
+        var totalCache: Long = 0
+        val cacheDir = context.cacheDir
+        val externalCacheDir = context.externalCacheDir
+
+        if (cacheDir != null && cacheDir.isDirectory) {
+            totalCache += getFolderSize(cacheDir)
+        }
+        if (externalCacheDir != null && externalCacheDir.isDirectory) {
+            totalCache += getFolderSize(externalCacheDir)
+        }
+
+        val mb = totalCache / (1024 * 1024)
+        return if (mb > 0) "$mb مگابایت" else "${totalCache / 1024} کیلوبایت"
+    }
+
+    fun clearAppCache(): Boolean {
+        return try {
+            val cacheDir = context.cacheDir
+            val externalCacheDir = context.externalCacheDir
+            deleteDir(cacheDir) && deleteDir(externalCacheDir)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     private fun getFileSHA256(file: File): String {
         return try {
             val digest = MessageDigest.getInstance("SHA-256")
@@ -173,7 +150,6 @@ class VirusScanner(private val context: Context) {
         }
     }
 
-    // محاسبه هیوریستیک ریسک بر اساس دسترسی‌های خطرناک واقعی
     private fun calculateRiskScore(pm: PackageManager, pkgInfo: PackageInfo, app: ApplicationInfo): Int {
         var score = 0
         val permissions = pkgInfo.requestedPermissions ?: arrayOf()
@@ -184,7 +160,6 @@ class VirusScanner(private val context: Context) {
         if (permissions.contains(android.Manifest.permission.PROCESS_OUTGOING_CALLS)) score += 15
         if (permissions.contains(android.Manifest.permission.RECORD_AUDIO)) score += 10
 
-        // چک کردن اینکه آیا برنامه خارج از گوگل پلی/بازار نصب شده یا نه
         val installer = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             try { pm.getInstallSourceInfo(app.packageName).installingPackageName } catch (e: Exception) { null }
         } else {
@@ -192,7 +167,7 @@ class VirusScanner(private val context: Context) {
             pm.getInstallerPackageName(app.packageName)
         }
 
-        if (installer == null) score += 15 // نصب دستی از فایل APK
+        if (installer == null) score += 15
 
         return score
     }
@@ -204,32 +179,6 @@ class VirusScanner(private val context: Context) {
         if (permissions.contains(android.Manifest.permission.SYSTEM_ALERT_WINDOW)) list.add("Overlay")
         if (permissions.contains(android.Manifest.permission.READ_SMS)) list.add("ReadSMS")
         return if (list.isEmpty()) "هیچ" else list.joinToString(", ")
-    }
-
-    // استعلام واقعی از API وب‌سایت VirusTotal
-    private fun checkVirusTotalHash(hash: String): Pair<Int, Int>? {
-        return try {
-            val url = URL("https://www.virustotal.com/api/v3/files/$hash")
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("x-apikey", apiKey)
-            conn.connectTimeout = 5000
-            conn.readTimeout = 5000
-
-            if (conn.responseCode == 200) {
-                val jsonStr = conn.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(jsonStr)
-                val stats = json.getJSONObject("data").getJSONObject("attributes").getJSONObject("last_analysis_stats")
-                val malicious = stats.getInt("malicious")
-                val harmless = stats.getInt("harmless")
-                val undetected = stats.getInt("undetected")
-                Pair(malicious, malicious + harmless + undetected)
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            null
-        }
     }
 
     private fun collectFilesRecursively(dir: File, fileList: MutableList<File>, maxDepth: Int) {
@@ -244,5 +193,28 @@ class VirusScanner(private val context: Context) {
                 fileList.add(file)
             }
         }
+    }
+
+    private fun getFolderSize(dir: File): Long {
+        var size: Long = 0
+        val files = dir.listFiles() ?: return 0
+        for (file in files) {
+            size += if (file.isDirectory) getFolderSize(file) else file.length()
+        }
+        return size
+    }
+
+    private fun deleteDir(dir: File?): Boolean {
+        if (dir != null && dir.isDirectory) {
+            val children = dir.list() ?: return false
+            for (child in children) {
+                val success = deleteDir(File(dir, child))
+                if (!success) return false
+            }
+            return dir.delete()
+        } else if (dir != null && dir.isFile) {
+            return dir.delete()
+        }
+        return false
     }
 }
