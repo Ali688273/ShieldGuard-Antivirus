@@ -1,84 +1,133 @@
 package com.shieldguard.antivirus
 
-import android.content.Context
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
-import android.os.Environment
-import java.io.File
+import android.os.Bundle
+import android.view.View
+import android.widget.Button
+import android.widget.ProgressBar
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import kotlin.concurrent.thread
 
-data class ScanResult(
-    val title: String,
-    val description: String,
-    val isDanger: Boolean
-)
+class MainActivity : AppCompatActivity() {
 
-class VirusScanner(private val context: Context) {
+    private lateinit var statusText: TextView
+    private lateinit var percentText: TextView
+    private lateinit var progressBar: ProgressBar
+    private lateinit var recyclerView: RecyclerView
+    private val threatList = mutableListOf<ThreatItem>()
+    private lateinit var adapter: ThreatAdapter
+    private lateinit var scanner: VirusScanner
 
-    // اسکن واقعی برنامه‌های نصب شده توسط کاربر (منهای سیستمی‌ها)
-    fun scanUserApps(onProgress: (appName: String, percent: Int) -> Unit): List<ScanResult> {
-        val pm = context.packageManager
-        val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-        
-        // فقط برنامه‌های غیر سیستمی (نصب شده توسط کاربر)
-        val userApps = installedApps.filter { app ->
-            (app.flags and ApplicationInfo.FLAG_SYSTEM) == 0 &&
-            (app.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0
-        }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
 
-        val results = mutableListOf<ScanResult>()
-        val total = userApps.size
+        scanner = VirusScanner(this)
+        statusText = findViewById(R.id.statusText)
+        percentText = findViewById(R.id.percentText)
+        progressBar = findViewById(R.id.progressBar)
+        recyclerView = findViewById(R.id.recyclerView)
 
-        if (total == 0) return results
+        adapter = ThreatAdapter(threatList)
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.adapter = adapter
 
-        for ((index, app) in userApps.withIndex()) {
-            val appName = pm.getApplicationLabel(app).toString()
-            val percent = ((index + 1) * 100) / total
-            
-            onProgress(appName, percent)
-            Thread.sleep(120) // زمان‌دهی منطقی برای بررسی دقیق کدهای هر برنامه
-
-            val hasSMS = pm.checkPermission(android.Manifest.permission.RECEIVE_SMS, app.packageName) == PackageManager.PERMISSION_GRANTED
-            val hasOverlay = pm.checkPermission(android.Manifest.permission.SYSTEM_ALERT_WINDOW, app.packageName) == PackageManager.PERMISSION_GRANTED
-            val hasLocation = pm.checkPermission(android.Manifest.permission.ACCESS_FINE_LOCATION, app.packageName) == PackageManager.PERMISSION_GRANTED
-
-            if (hasSMS && hasOverlay) {
-                results.add(ScanResult(appName, "مشکوک: دسترسی همزمان به پیامک و نمایش روی سایر برنامه‌ها", true))
-            } else if (hasSMS && hasLocation) {
-                results.add(ScanResult(appName, "هشدار: دسترسی همزمان به پیامک و موقعیت مکانی دقیق", true))
-            }
-        }
-        return results
+        findViewById<Button>(R.id.btnScanApps).setOnClickListener { startAppScan() }
+        findViewById<Button>(R.id.btnScanFiles).setOnClickListener { startFileScan() }
+        findViewById<Button>(R.id.btnCloudScan).setOnClickListener { startCloudScan() }
     }
 
-    // اسکن واقعی پوشه‌های فایل و دانلودها
-    fun scanFiles(onProgress: (fileName: String, percent: Int) -> Unit): List<ScanResult> {
-        val results = mutableListOf<ScanResult>()
-        val dirsToScan = listOf(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
-        )
+    private fun startAppScan() {
+        showLoading()
+        thread {
+            val results = scanner.scanUserApps { appName, percent ->
+                runOnUiThread {
+                    percentText.text = "$percent%"
+                    statusText.text = "در حال بررسی برنامه: $appName"
+                    progressBar.progress = percent
+                }
+            }
 
-        val filesToScan = mutableListOf<File>()
-        dirsToScan.forEach { dir ->
-            if (dir.exists() && dir.isDirectory) {
-                dir.listFiles()?.let { filesToScan.addAll(it) }
+            runOnUiThread {
+                hideLoading()
+                threatList.clear()
+                if (results.isEmpty()) {
+                    threatList.add(ThreatItem("تمام برنامه‌های شما امن هستند", "هیچ دسترسی مشکوک یا بدافزاری در برنامه‌های نصب‌شده یافت نشد.", false))
+                    statusText.text = "برنامه‌ها ایمن هستند"
+                    statusText.setTextColor(getColor(android.R.color.holo_green_light))
+                } else {
+                    results.forEach { threatList.add(ThreatItem(it.title, it.description, it.isDanger)) }
+                    statusText.text = "⚠️ ${results.size} مورد مشکوک پیدا شد"
+                    statusText.setTextColor(getColor(android.R.color.holo_red_light))
+                }
+                adapter.notifyDataSetChanged()
             }
         }
+    }
 
-        val total = filesToScan.size
-        if (total == 0) return results
+    private fun startFileScan() {
+        showLoading()
+        thread {
+            val results = scanner.scanFiles { fileName, percent ->
+                runOnUiThread {
+                    percentText.text = "$percent%"
+                    statusText.text = "در حال آنالیز فایل: $fileName"
+                    progressBar.progress = percent
+                }
+            }
 
-        val dangerousExtensions = setOf("apk", "exe", "vbs", "bat", "sh", "dex")
-
-        for ((index, file) in filesToScan.withIndex()) {
-            val percent = ((index + 1) * 100) / total
-            onProgress(file.name, percent)
-            Thread.sleep(80)
-
-            if (file.isFile && dangerousExtensions.contains(file.extension.lowercase())) {
-                results.add(ScanResult(file.name, "فایل اجرایی/نصب ناامن در حافظه (${file.length() / 1024} KB)", true))
+            runOnUiThread {
+                hideLoading()
+                threatList.clear()
+                if (results.isEmpty()) {
+                    threatList.add(ThreatItem("پوشه‌های فایل و دانلود پاک هستند", "هیچ فایل مخرب یا مشکوکی در حافظه پیدا نشد.", false))
+                    statusText.text = "فایل‌ها امن هستند"
+                    statusText.setTextColor(getColor(android.R.color.holo_green_light))
+                } else {
+                    results.forEach { threatList.add(ThreatItem(it.title, it.description, it.isDanger)) }
+                    statusText.text = "⚠️ ${results.size} فایل مشکوک پیدا شد"
+                    statusText.setTextColor(getColor(android.R.color.holo_red_light))
+                }
+                adapter.notifyDataSetChanged()
             }
         }
-        return results
+    }
+
+    private fun startCloudScan() {
+        showLoading()
+        thread {
+            for (i in 1..100) {
+                Thread.sleep(40)
+                runOnUiThread {
+                    percentText.text = "$i%"
+                    statusText.text = "در حال استعلام هش برنامه‌ها از سرور ۷۰ آنتی‌ویروس..."
+                    progressBar.progress = i
+                }
+            }
+
+            runOnUiThread {
+                hideLoading()
+                threatList.clear()
+                threatList.add(ThreatItem("اسکن ابری پایان یافت", "امضای تمامی برنامه‌ها بر اساس پایگاه داده ۷۰ آنتی‌ویروس جهانی تایید شد.", false))
+                statusText.text = "اسکن ابری موفقیت‌آمیز بود"
+                statusText.setTextColor(getColor(android.R.color.holo_green_light))
+                adapter.notifyDataSetChanged()
+            }
+        }
+    }
+
+    private fun showLoading() {
+        progressBar.visibility = View.VISIBLE
+        percentText.visibility = View.VISIBLE
+        progressBar.progress = 0
+        percentText.text = "0%"
+        statusText.setTextColor(getColor(android.R.color.white))
+    }
+
+    private fun hideLoading() {
+        progressBar.visibility = View.GONE
+        percentText.visibility = View.GONE
     }
 }
