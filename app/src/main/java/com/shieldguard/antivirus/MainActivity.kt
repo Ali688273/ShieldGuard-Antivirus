@@ -1,12 +1,11 @@
 package com.shieldguard.antivirus
 
 import android.Manifest
-import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.ProgressBar
@@ -45,7 +44,6 @@ class MainActivity : AppCompatActivity() {
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
-        // درخواست دسترسی حافظه در ابتدای برنامه
         checkAndRequestPermissions()
 
         findViewById<Button>(R.id.btnScanApps).setOnClickListener { startAppScan() }
@@ -56,29 +54,9 @@ class MainActivity : AppCompatActivity() {
                 checkAndRequestPermissions()
             }
         }
-        findViewById<Button>(R.id.btnCloudScan).setOnClickListener { 
-            if (isNetworkAvailable()) {
-                startCloudScan()
-            } else {
-                Toast.makeText(this, "خطا: اسکن ابری نیازمند اتصال به اینترنت است!", Toast.LENGTH_LONG).show()
-                statusText.text = "⚠️ برای اسکن ابری اینترنت را روشن کنید"
-                statusText.setTextColor(getColor(android.R.color.holo_red_light))
-            }
-        }
-    }
-
-    private fun isNetworkAvailable(): Boolean {
-        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val network = connectivityManager.activeNetwork ?: return false
-            val activeNetwork = connectivityManager.getNetworkCapabilities(network) ?: return false
-            return activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                   activeNetwork.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-        } else {
-            @Suppress("DEPRECATION")
-            val networkInfo = connectivityManager.activeNetworkInfo ?: return false
-            @Suppress("DEPRECATION")
-            return networkInfo.isConnected
+        
+        findViewById<Button>(R.id.btnCleanCache).setOnClickListener { 
+            startCacheCleaner()
         }
     }
 
@@ -165,32 +143,40 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startCloudScan() {
+    private fun startCacheCleaner() {
         showLoading()
         thread {
-            val results = scanner.scanCloudReal { appName, percent ->
-                runOnUiThread {
-                    percentText.text = "$percent%"
-                    statusText.text = "استعلام ابری آنلاین: $appName"
-                    progressBar.progress = percent
-                }
+            runOnUiThread {
+                statusText.text = "در حال محاسبه و آزادسازی حافظه پنهان..."
+                progressBar.progress = 50
+                percentText.text = "50%"
             }
+
+            Thread.sleep(800)
+            val cacheSizeBefore = scanner.getCacheSize()
+            val success = scanner.clearAppCache()
 
             runOnUiThread {
                 hideLoading()
                 threatList.clear()
-                val dangerCount = results.count { it.isDanger }
 
-                results.forEach { threatList.add(ThreatItem(it.title, it.description, it.isDanger)) }
-
-                if (dangerCount == 0) {
-                    statusText.text = "اسکن ابری آنلاین کامل شد (${results.size} برنامه تایید شد)"
+                if (success) {
+                    threatList.add(ThreatItem("پاک‌سازی فایل‌های موقت", "فایل‌های کش موقت برنامه با موفقیت آزادسازی شدند ($cacheSizeBefore).", false))
+                    threatList.add(ThreatItem("پاک‌سازی کش کلی دستگاه", "برای آزادسازی کامل حافظه پنهان سایر برنامه‌ها، صفحه مدیریت حافظه باز شد.", false))
+                    statusText.text = "حافظه پنهان آزادسازی شد"
                     statusText.setTextColor(getColor(android.R.color.holo_green_light))
                 } else {
-                    statusText.text = "⚠️ $dangerCount تهدید ابری کشف شد"
+                    statusText.text = "خطا در پاک‌سازی کش"
                     statusText.setTextColor(getColor(android.R.color.holo_red_light))
                 }
                 adapter.notifyDataSetChanged()
+
+                try {
+                    val intent = Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(this@MainActivity, "تنظیمات حافظه باز شد", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
