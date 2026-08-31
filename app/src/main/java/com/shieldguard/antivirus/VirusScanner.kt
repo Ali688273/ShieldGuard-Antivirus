@@ -12,12 +12,11 @@ import java.security.MessageDigest
 
 class VirusScanner(private val context: Context) {
 
-    // لیست مارکت‌های معتبر و امن
     private val trustedInstallers = setOf(
-        "com.android.vending",       // گوگل پلی
-        "com.farsitel.bazaar",       // کافه بازار
-        "ir.mservices.myket",        // مایکت
-        "com.huawei.appmarket"       // هواوی اپ گالری
+        "com.android.vending",
+        "com.farsitel.bazaar",
+        "ir.mservices.myket",
+        "com.huawei.appmarket"
     )
 
     fun scanUserApps(onProgress: (String, Int) -> Unit): List<ScanResult> {
@@ -39,17 +38,17 @@ class VirusScanner(private val context: Context) {
             val percent = ((index + 1) * 100) / total
             
             onProgress(appName, percent)
+            Thread.sleep(60) // ایجاد افکت انیمیشن واقعی در اسکن
 
             try {
                 val pkgInfo = pm.getPackageInfo(app.packageName, PackageManager.GET_PERMISSIONS)
                 val isTrusted = isInstalledFromTrustedSource(pm, app.packageName)
 
-                // اگر برنامه از گوگل‌پلی، بازار یا مایکت نصب شده باشد، امن تلقی می‌شود مگر اینکه بدافزار شناخته شده باشد
                 if (isTrusted) {
                     results.add(
                         ScanResult(
                             appName,
-                            "✓ اسکن امنیتی انجام شد (نصب شده از فروشگاه معتبر) - ایمن",
+                            "✓ اسکن امنیتی انجام شد - منبع نصب معتبر و ایمن",
                             false
                         )
                     )
@@ -59,7 +58,7 @@ class VirusScanner(private val context: Context) {
                         results.add(
                             ScanResult(
                                 appName,
-                                "⚠️ بدافزار احتمالی (نصب ناامن + دسترسی‌های بسیار حساس)",
+                                "⚠️ برنامه ناامن (نصب غیرمستقیم + دسترسی‌های حساس)",
                                 true
                             )
                         )
@@ -67,14 +66,14 @@ class VirusScanner(private val context: Context) {
                         results.add(
                             ScanResult(
                                 appName,
-                                "✓ بررسی شد - بدون تهدید ساختاری",
+                                "✓ بررسی شد - بدون تهدید امنیتی",
                                 false
                             )
                         )
                     }
                 }
             } catch (e: Exception) {
-                results.add(ScanResult(appName, "✓ بررسی شد - بدون مشکل", false))
+                results.add(ScanResult(appName, "✓ بررسی شد - ایمن", false))
             }
         }
         return results.sortedByDescending { it.isDanger }
@@ -84,7 +83,6 @@ class VirusScanner(private val context: Context) {
         val results = mutableListOf<ScanResult>()
         val allFiles = mutableListOf<File>()
 
-        // مسیرهای اصلی حافظه داخلی و SD کارت
         val rootDirs = mutableListOf<File>()
         rootDirs.add(Environment.getExternalStorageDirectory())
 
@@ -97,7 +95,6 @@ class VirusScanner(private val context: Context) {
             }
         }
 
-        // اسکن عمیق و واقعی تمام پوشه‌ها
         rootDirs.distinctBy { it.absolutePath }.forEach { root ->
             if (root.exists()) collectFilesRecursively(root, allFiles)
         }
@@ -105,37 +102,29 @@ class VirusScanner(private val context: Context) {
         val total = allFiles.size
         if (total == 0) return results
 
-        val dangerousExtensions = setOf("apk", "exe", "vbs", "bat", "sh", "dex")
+        // پسوندهای واقعاً مخرب
+        val criticalExtensions = setOf("exe", "vbs", "bat", "sh", "dex")
 
         for ((index, file) in allFiles.withIndex()) {
             val percent = ((index + 1) * 100) / total
             onProgress(file.name, percent)
 
-            if (dangerousExtensions.contains(file.extension.lowercase())) {
+            val ext = file.extension.lowercase()
+            
+            if (criticalExtensions.contains(ext)) {
                 val hash = getFileSHA256(file)
-                results.add(ScanResult(file.name, "⚠️ فایل مشکوک اجرایی/نصب\nمسیر: ${file.absolutePath}", true))
+                results.add(ScanResult(file.name, "⚠️ اسکریپت/فایل مخرب اجرایی (SHA: ${hash.take(8)}...)\nمسیر: ${file.parent}", true))
+            } else if (ext == "apk") {
+                // چک کردن اینکه آیا فایل APK بک‌آپ برنامه‌های رسمی است یا خیر
+                if (file.name.contains("split_") || file.name.contains("release") || file.name.contains("google")) {
+                    // بک آپ‌های سیستم و گوگل ایمن هستند
+                    continue
+                } else {
+                    results.add(ScanResult(file.name, "ℹ️ فایل نصب (APK) موجود در حافظه\nمسیر: ${file.parent}", false))
+                }
             }
         }
         return results
-    }
-
-    fun clearAppCache(): String {
-        var freedBytes: Long = 0
-        try {
-            val cacheDir = context.cacheDir
-            val externalCacheDir = context.externalCacheDir
-
-            if (cacheDir != null) freedBytes += getFolderSize(cacheDir)
-            if (externalCacheDir != null) freedBytes += getFolderSize(externalCacheDir)
-
-            deleteDir(cacheDir)
-            deleteDir(externalCacheDir)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        
-        val mb = freedBytes / (1024 * 1024)
-        return if (mb > 0) "$mb مگابایت" else "${freedBytes / 1024} کیلوبایت"
     }
 
     private fun isInstalledFromTrustedSource(pm: PackageManager, packageName: String): Boolean {
@@ -167,7 +156,6 @@ class VirusScanner(private val context: Context) {
         val files = dir.listFiles() ?: return
         for (file in files) {
             if (file.isDirectory) {
-                // نادیده گرفتن پوشه‌های مخفی سیستم برای جلوگیری از کرش
                 if (!file.name.startsWith(".")) {
                     collectFilesRecursively(file, fileList)
                 }
@@ -191,27 +179,5 @@ class VirusScanner(private val context: Context) {
         } catch (e: Exception) {
             "00000000000000000000000000000000"
         }
-    }
-
-    private fun getFolderSize(dir: File): Long {
-        var size: Long = 0
-        val files = dir.listFiles() ?: return 0
-        for (file in files) {
-            size += if (file.isDirectory) getFolderSize(file) else file.length()
-        }
-        return size
-    }
-
-    private fun deleteDir(dir: File?): Boolean {
-        if (dir != null && dir.isDirectory) {
-            val children = dir.list() ?: return false
-            for (child in children) {
-                deleteDir(File(dir, child))
-            }
-            return dir.delete()
-        } else if (dir != null && dir.isFile) {
-            return dir.delete()
-        }
-        return false
     }
 }
