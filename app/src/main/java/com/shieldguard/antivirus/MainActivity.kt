@@ -12,7 +12,6 @@ import android.view.View
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -53,10 +52,6 @@ class MainActivity : AppCompatActivity() {
             } else {
                 requestFullStoragePermission()
             }
-        }
-        
-        findViewById<Button>(R.id.btnCleanCache).setOnClickListener { 
-            startCacheCleaner()
         }
     }
 
@@ -129,7 +124,7 @@ class MainActivity : AppCompatActivity() {
             val results = scanner.scanFiles { fileName, percent ->
                 runOnUiThread {
                     percentText.text = "$percent%"
-                    statusText.text = "در حال ورود و آنالیز عمیق پوشه: $fileName"
+                    statusText.text = "در حال بررسی فایل: $fileName"
                     progressBar.progress = percent
                 }
             }
@@ -138,40 +133,22 @@ class MainActivity : AppCompatActivity() {
                 hideLoading()
                 threatList.clear()
 
-                if (results.isEmpty()) {
-                    threatList.add(ThreatItem("تمام پوشه‌ها و کارت حافظه اسکن شدند", "هیچ فایل مخرب یا خطرسازی در هیچ پوشه‌ای پیدا نشد.", false))
+                val dangerCount = results.count { it.isDanger }
+
+                if (dangerCount == 0 && results.isEmpty()) {
+                    threatList.add(ThreatItem("پوشه‌ها اسکن شدند", "هیچ فایل مخربی در پوشه‌ها پیدا نشد.", false))
                     statusText.text = "حافظه و پوشه‌ها کاملاً پاک هستند"
                     statusText.setTextColor(getColor(android.R.color.holo_green_light))
                 } else {
                     results.forEach { threatList.add(ThreatItem(it.title, it.description, it.isDanger)) }
-                    statusText.text = "⚠️ ${results.size} فایل ناامن در پوشه‌ها پیدا شد"
-                    statusText.setTextColor(getColor(android.R.color.holo_red_light))
+                    if (dangerCount > 0) {
+                        statusText.text = "⚠️ $dangerCount فایل مخرب پیدا شد"
+                        statusText.setTextColor(getColor(android.R.color.holo_red_light))
+                    } else {
+                        statusText.text = "اسکن کامل شد (${results.size} فایل شناسایی شد)"
+                        statusText.setTextColor(getColor(android.R.color.holo_green_light))
+                    }
                 }
-                adapter.notifyDataSetChanged()
-            }
-        }
-    }
-
-    private fun startCacheCleaner() {
-        showLoading()
-        thread {
-            runOnUiThread {
-                statusText.text = "در حال پاک‌سازی فایل‌های موقت و حافظه پنهان..."
-                progressBar.progress = 50
-                percentText.text = "50%"
-            }
-
-            Thread.sleep(600)
-            val freedAmount = scanner.clearAppCache()
-
-            runOnUiThread {
-                hideLoading()
-                threatList.clear()
-
-                threatList.add(ThreatItem("پاک‌سازی حافظه پنهان", "مقدار $freedAmount فایل‌های موقت با موفقیت پاک‌سازی شد.", false))
-                statusText.text = "حافظه پنهان پاک‌سازی شد ($freedAmount آزادسازی شد)"
-                statusText.setTextColor(getColor(android.R.color.holo_green_light))
-                
                 adapter.notifyDataSetChanged()
             }
         }
