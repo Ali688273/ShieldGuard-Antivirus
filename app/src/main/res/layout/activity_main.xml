@@ -6,7 +6,6 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <!-- عنوان برنامه -->
     <TextView
         android:id="@+id/titleText"
         android:layout_width="wrap_content"
@@ -19,7 +18,6 @@
         android:textSize="22sp"
         android:textStyle="bold" />
 
-    <!-- متن وضعیت اسکن -->
     <TextView
         android:id="@+id/statusText"
         android:layout_width="match_parent"
@@ -29,7 +27,6 @@
         android:textColor="#B0BEC5"
         android:textSize="14sp" />
 
-    <!-- درصد پیشرفت -->
     <TextView
         android:id="@+id/percentText"
         android:layout_width="wrap_content"
@@ -42,7 +39,6 @@
         android:textStyle="bold"
         android:visibility="gone" />
 
-    <!-- نوار پیشرفت (Progress Bar) -->
     <ProgressBar
         android:id="@+id/progressBar"
         style="?android:attr/progressBarStyleHorizontal"
@@ -54,7 +50,6 @@
         android:progressDrawable="@android:drawable/progress_horizontal"
         android:visibility="gone" />
 
-    <!-- دکمه اسکن برنامه‌ها -->
     <Button
         android:id="@+id/btnScanApps"
         android:layout_width="match_parent"
@@ -66,31 +61,17 @@
         android:textColor="#FFFFFF"
         android:textSize="15sp" />
 
-    <!-- دکمه اسکن عمیق فایل‌ها -->
     <Button
         android:id="@+id/btnScanFiles"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
+        android:layout_marginBottom="16dp"
         android:backgroundTint="#43A047"
         android:padding="12dp"
         android:text="اسکن عمیق فایل‌ها و حافظه"
         android:textColor="#FFFFFF"
         android:textSize="15sp" />
 
-    <!-- دکمه پاک‌سازی حافظه پنهان (Cache Cleaner) -->
-    <Button
-        android:id="@+id/btnCleanCache"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:backgroundTint="#FB8C00"
-        android:padding="12dp"
-        android:text="پاک‌سازی حافظه پنهان (Cache)"
-        android:textColor="#FFFFFF"
-        android:textSize="15sp" />
-
-    <!-- لیست نمایش نتایج اسکن -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
